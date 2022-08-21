@@ -2,7 +2,7 @@
 
 ## Design Guidelines
 
-This OS provider should provide users with an easy way of creating Ganeti Instances from simple blockdevice images using the [Ganeti OS Interface](https://docs.ganeti.org/docs/ganeti/3.0/html/man-ganeti-os-interface.html?highlight=interface).
+This OS provider should provide users with an easy way of creating Ganeti Instances from simple blockdevice images using the [Ganeti OS Interface](https://docs.ganeti.org/docs/ganeti/3.0/html/man-ganeti-os-interface.html). The main usecases would be testing, simple instance duplication or quick-start with Ganeti.
 
 ### Image Sources and Formats
 
