@@ -12,16 +12,16 @@ The OS provider does not make any assumptions about the content of the image nor
 
 ### Variants
 
-The variants can be used to distinguish the type of image used. This way Ganeti users will be able to derive the type of image used directly from instance details.
+This OS provider most likely will only have one variant which defines some general parameters (see below). The actual image source will be defined through an OS parameter with each instance.
 
 ### Variant Parameters
 
-* `IMG_SOURCE`: URL to the disk image. Supported schemes will be: `file://`, `http://`, `https://`
 * `PROXY`: URL to HTTP(S) proxy. Will be used both for HTTP and HTTPS connections if set
+* `TLS_VERIFY`: Can be set to `true|false` to determine if TLS certificates should be verified for HTTPS URLs or not
 
 ### OS Parameters
 
-No further parameters are required.
+* `image_source`: URL to the disk image. Supported schemes will be: `file://`, `http://`, `https://`
 
 ### Hooks
 
