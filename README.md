@@ -10,6 +10,19 @@ Images should be accessible through a local filesystem path or can be retrieved 
 
 The OS provider does not make any assumptions about the content of the image nor does it alter it in any way. 
 
+### Variants
+
+The variants can be used to distinguish the type of image used. This way Ganeti users will be able to derive the type of image used directly from instance details.
+
+### Variant Parameters
+
+* `IMG_SOURCE`: URL to the disk image. Supported schemes will be: `file://`, `http://`, `https://`
+* `PROXY`: URL to HTTP(S) proxy. Will be used both for HTTP and HTTPS connections if set
+
+### OS Parameters
+
+No further parameters are required.
+
 ### Hooks
 
 The OS provider may implement a hook system which lets users add additional steps to the provisioning process. Hooks may be executed _before_ the image is downloaded/opened or _after_ it has been written to the blockdevice. The documentation should make clear that this should not be used for advanced image/data manipulation. Instead, a different OS provider should be implemented/used. A hook could be any executable file.
