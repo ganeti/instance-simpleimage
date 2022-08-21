@@ -18,6 +18,8 @@ This OS provider most likely will only have one variant which defines some gener
 
 * `PROXY`: URL to HTTP(S) proxy. Will be used both for HTTP and HTTPS connections if set
 * `TLS_VERIFY`: Can be set to `true|false` to determine if TLS certificates should be verified for HTTPS URLs or not
+* `IMAGE_STORAGE`: Where to store downloaded images
+* `DELETE_AFTER_USE`: Can be set to `true|false` to determine if downloaded images should be kept or removed after use (the OS provider may use a HTTP HEAD request to determine if an already downloaded image can be re-used or if it needs to be downloaded again)
 
 ### OS Parameters
 
