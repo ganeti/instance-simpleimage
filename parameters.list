@@ -1,0 +1,2 @@
+image The local path or URL to the source image file. May start with http(s):// to indicate a remotely stored image.
+image_type The format of the image. May be one of 'raw', 'raw+bz2', 'raw+gz', 'raw+xz', or 'qcow2'. The latter requires ``qemu-img`` to be present!

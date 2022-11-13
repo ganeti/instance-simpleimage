@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# instance-simpleimage - simple image-based OS provider for Ganeti
+# Copyright (C) 2022 The Ganeti Project
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+set -e
+
+. common.sh
+
+if [[ "$OSP_IMAGE" == http://* ]] || [[ "$OSP_IMAGE" == https://* ]]; then
+    if ! curl $CUSTOM_CURL_OPTS -sfI "$OSP_IMAGE"; then
+        echo "Unable to access the remote image at '$OSP_IMAGE'" 1>&2
+        exit 1
+    fi
+elif [[ ! -e "$OSP_IMAGE" ]]; then
+    echo "Unable to access the local image at '$OSP_IMAGE'" 1>&2
+    exit 1
+fi
+
+case "$OSP_IMAGE_TYPE" in
+    raw|raw+bz2|raw+gz|raw+xz)
+    ;;
+    qcow2)
+        if ! which qemu-img > /dev/null; then
+            echo "image_type set to 'qcow2' but unable to locate qemu-img binary." 1>&2
+            exit 1
+        fi
+    ;;
+    *)
+        echo "Invalid image_type '$OSP_IMAGE_TYPE' supplied. Please use one of the following: 'raw', 'raw+bz2', 'raw+gz', 'raw+xz', 'qcow2'" 1>&2
+        exit 1
+    ;;
+esac
+
+exit 0

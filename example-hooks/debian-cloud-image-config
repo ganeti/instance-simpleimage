@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# instance-simpleimage - simple image-based OS provider for Ganeti
+# Copyright (C) 2022 The Ganeti Project
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+
+# the following hook script is an example how to mount/manipulate the
+# instance's disk after the image has been written to it. please keep in
+# mind this is not a generic hook because it makes assumptions about the
+# partition layout!
+# a more sophisticated approach would be to use tools like libguestfs
+
+set -e
+
+cleanup() {
+  kpartx -d $TARGET_DISK_DEVICE
+  if [ -n "$MOUNTPOINT" ]; then
+    rm -rf "$MOUNTPOINT"
+  fi
+}
+
+# we'll assume the disk layout of the official Debian cloud images:
+# Disk /dev/gnt/cccf7ab4-2f72-405f-82a3-b909dba2940a.disk0: 2.5 GiB, 2684354560 bytes, 5242880 sectors
+# Units: sectors of 1 * 512 = 512 bytes
+# Sector size (logical/physical): 512 bytes / 512 bytes
+# I/O size (minimum/optimal): 512 bytes / 512 bytes
+# Disklabel type: gpt
+# Disk identifier: 30F2734D-4336-8241-8076-7B7D90B7DBBD
+# 
+# Device                                                  Start     End Sectors  Size Type
+# /dev/gnt/cccf7ab4-2f72-405f-82a3-b909dba2940a.disk0p1  262144 5242846 4980703  2.4G Linux filesystem
+# /dev/gnt/cccf7ab4-2f72-405f-82a3-b909dba2940a.disk0p14   2048    8191    6144    3M BIOS boot
+# /dev/gnt/cccf7ab4-2f72-405f-82a3-b909dba2940a.disk0p15   8192  262143  253952  124M EFI System
+
+
+# kpartx -l prints all partition mappings kpartx _would_ create
+# -p-partition changes the partition-identifier from "pX" to "-partitionX" which is easier/safer to grep
+FIRST_PARTITION_MAPPING=$(kpartx -l -p-partition $TARGET_DISK_DEVICE|grep -- "-partition1 :"|cut -d " " -f1 )
+
+if [ -z "$FIRST_PARTITION_MAPPING" ]; then
+  echo "Could not find any partitions on '$TARGET_DISK_DEVICE'"
+  exit 1
+fi
+
+trap cleanup EXIT
+
+kpartx -a -p-partition $TARGET_DISK_DEVICE
+MOUNTPOINT=$(mktemp -d)
+
+mount /dev/mapper/$FIRST_PARTITION_MAPPING $MOUNTPOINT
+
+echo $INSTANCE_NAME > $MOUNTPOINT/etc/hostname
+
+umount $MOUNTPOINT

@@ -1,34 +1,78 @@
 # instance-simpleimage
 
-## Design Guidelines
+This OS provider allows users to easily create Ganeti Instances from simple blockdevice images using the [Ganeti OS Interface](https://docs.ganeti.org/docs/ganeti/3.0/html/man-ganeti-os-interface.html).
 
-This OS provider should provide users with an easy way of creating Ganeti Instances from simple blockdevice images using the [Ganeti OS Interface](https://docs.ganeti.org/docs/ganeti/3.0/html/man-ganeti-os-interface.html). The main usecases would be testing, simple instance duplication or quick-start with Ganeti.
+**instance-simpleimage is early alpha-stage code and has not seen a release yet. It is not yet meant for production use!**
 
-### Image Sources and Formats
+## Image Sources and Formats
 
-Images should be accessible through a local filesystem path or can be retrieved from HTTP(S) URLs. An OS image is considered to be a bitwise replication of a blockdevice and may contain a partition table with filesystems or just one single filesystem.
+Images need to be accessible through a local filesystem path or can be retrieved from HTTP(S) URLs. An OS image is considered to be a bitwise replication of a blockdevice and may contain a partition table with filesystems or just one single filesystem. The OS provider also supports qcow2 images but requires `qemu-img` to be present on the system.
 
-The OS provider does not make any assumptions about the content of the image nor does it alter it in any way. 
+The OS provider does not make any assumptions about the content of the image nor does it alter it in any way (but the latter _can_ be achieved using custom hook scripts).
 
-### Variants
+## Variants
 
-This OS provider most likely will only have one variant which defines some general parameters (see below). The actual image source will be defined through an OS parameter with each instance.
+This OS provider uses variants to offer different configurations. The actual image source and image type will be defined through OS parameters with each instance. 
 
-### Variant Parameters
+## Variant Parameters
 
-* `PROXY`: URL to HTTP(S) proxy. Will be used both for HTTP and HTTPS connections if set
-* `TLS_VERIFY`: Can be set to `true|false` to determine if TLS certificates should be verified for HTTPS URLs or not
-* `IMAGE_STORAGE`: Where to store downloaded images
-* `DELETE_AFTER_USE`: Can be set to `true|false` to determine if downloaded images should be kept or removed after use (the OS provider may use a HTTP HEAD request to determine if an already downloaded image can be re-used or if it needs to be downloaded again)
+You can overwrite any of the following settings in the config file `/etc/ganeti/instance-simpleimage/$variant/config` per variant:
 
-### OS Parameters
+* `PROXY`: URL to HTTP(S) proxy. Will be used both for HTTP and HTTPS connections if set - default: no proxy used
+* `CUSTOM_CURL_OPTS`: Extend curl commandline with custom parameters (e.g. `-k` to ignore TLS certificate errors) - default: no extra options passed
+* `IMAGE_STORAGE`: Where to store downloaded images - default: /tmp/ganeti-instance-simpleimage
+* `DOWNLOAD_CACHE_MAX_DAYS`: Images will be cached for the specified amount of days, after that they will be discarded and downloaded again - default: 7 days
 
-* `image_source`: URL to the disk image. Supported schemes will be: `file://`, `http://`, `https://`
+## OS Parameters
 
-### Hooks
+* `image`: This can either be a locally accessible path or an HTTP(s) URL starting with `http://` or `https://`
+* `image_type`: Indicates the type of image. Currently supported image types are:
+ * `raw`: a bitwise replication of a blockdevice
+ * `raw+bzip2`, `raw+gz`, `raw+xz`: a bitwise replication of a blockdevice but compressed with bzip2/gz/xz
+ * `qcow2`: a qcow2-type image (requires `qemu-img` to be present)
 
-The OS provider may implement a hook system which lets users add additional steps to the provisioning process. Hooks may be executed _before_ the image is downloaded/opened or _after_ it has been written to the blockdevice. The documentation should make clear that this should not be used for advanced image/data manipulation. Instead, a different OS provider should be implemented/used. A hook could be any executable file.
+## Hooks
 
-### Programming Language
+Each variant does have its own hooks folder (`/etc/ganeti/instance-simpleimage/$VARIANT/hooks`). Hooks can be any executable file and should follow the conventions of the `run-parts`(8) command to be executed. Hooks will be run _after_ the image has been written to the disk. All os provider parameters will be visible to the hooks as environmennt variables (e.g. `DISK_X_*`, `DISK_COUNT`, `NIC_X_*`, `NIC_COUNT`, `INSTANCE_HV_*`, `OSP_*`) and can be looked up in the OS provider interface documentation. Additionaly, the variable `TARGET_DISK_DEVICE` will always contain a blockdevice reference to the first instance disk. If the storage is file based, this will contain a `/dev/loopX` device, already set up by the OS provider. You do not need to take care of that in your hook. Please take a look at the `example-hooks` folder to find usable boilerplate code or inspiration for custom hooks.
 
-This provider should make use of technologies available on a basic Ganeti node. This would include both Bash and basic Python 3 (e.g. only using the standard library and no external modules).
+## Installation
+
+This OS provider is in an early stage and has not seen an official release yet. If you want to give it a try, follow these steps:
+
+```shell
+cd /usr/share/ganeti/os
+git clone git@github.com:ganeti/instance-simpleimage simpleimage
+mkdir -p /etc/ganeti/instance-simpleimage/default/hooks
+touch /etc/ganeti/instance-simpleimage/default/config
+```
+
+If you want to add more variants, edit `/usr/share/ganeti/os/simpleimage/variants.list` and create the required folder and (empty) config file in `/etc/ganeti/instance-simpleimage/$variant`. You may add any configuration directive from the above documentation to the `config` file. You may also add as many hook scripts to the hook folder as you wish.
+
+## Usage
+
+**Use the official Debian "nocloud" image**:
+```shell
+gnt-instance add -t plain --disk=0:size=4g \
+                 -B minmem=1G,maxmem=1G,vcpus=2 \
+                 -o simpleimage+default \
+                 -O image=https://cloud.debian.org/images/cloud/bullseye/daily/latest/debian-11-nocloud-amd64-daily.raw,image_type=raw \
+                 debian-nocloud.example.org
+```
+
+**Use a local image, compressed with xz**:
+```shell
+gnt-instance add -t plain --disk=0:size=4g \
+                 -B minmem=1G,maxmem=1G,vcpus=2 \
+                 -o simpleimage+default \
+                 -O image=/data/images/linux.img.xz,image_type=raw+xz \
+                 machine.example.org
+```
+
+**Use a qcow2 image**:
+```shell
+gnt-instance add -t plain --disk=0:size=4g \
+                 -B minmem=1G,maxmem=1G,vcpus=2 \
+                 -o simpleimage+default \
+                 -O image=https://cloud.debian.org/images/cloud/bullseye/daily/latest/debian-11-genericcloud-amd64-daily.qcow2,image_type=qcow2 \
+                 debian-genericcloud.example.org
+```

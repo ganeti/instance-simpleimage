@@ -1,0 +1,120 @@
+#!/bin/bash
+
+# instance-simpleimage - simple image-based OS provider for Ganeti
+# Copyright (C) 2022 The Ganeti Project
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License along
+# with this program; if not, write to the Free Software Foundation, Inc.,
+# 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+set -e
+
+. common.sh
+
+teardown_loop() {
+    if echo "$TARGET_DISK_DEVICE" | grep -q '^/dev/loop'; then
+        losetup -d "$TARGET_DISK_DEVICE"
+    fi
+}
+
+trap teardown_loop EXIT
+
+# download the image if needed
+if [[ "$OSP_IMAGE" == http://* ]] || [[ "$OSP_IMAGE" == https://* ]]; then
+    mkdir -p "$IMAGE_STORAGE"
+
+    # clean expired downloaded images
+    find "$IMAGE_STORAGE" -type f -mtime +"$DOWNLOAD_CACHE_MAX_DAYS" -delete
+
+    CHECKSUM=$(echo -n "$OSP_IMAGE" | sha1sum | cut -d " " -f1)
+    OUTPUT_FILENAME=$IMAGE_STORAGE/$CHECKSUM
+
+    if [[ ! -f "$OUTPUT_FILENAME" ]]; then
+        echo "Running 'curl $CHECK_TLS_OPT -sfL $OSP_IMAGE --output $OUTPUT_FILENAME'" 1>&2
+        if ! curl $CUSTOM_CURL_OPTS -sfL "$OSP_IMAGE" --output "$OUTPUT_FILENAME"; then
+            echo "Unable to download remote image from '$OSP_IMAGE' to '$OUTPUT_FILE'" 1>&2
+            exit 1
+        fi
+    else
+        echo "$OUTPUT_FILENAME already present, skipping download of $OSP_IMAGE"
+    fi
+    DISK_IMAGE="$OUTPUT_FILENAME"
+else
+    DISK_IMAGE="$OSP_IMAGE"
+fi
+
+if [[ -b "$DISK_0_PATH" ]]; then
+    TARGET_DISK_DEVICE=$DISK_0_PATH
+elif [[ -f "$DISK_0_PATH" ]]; then
+    echo "'$DISK_0_PATH' is a file, running 'losetup --show --find $DISK_0_PATH'" 1>&2
+    TARGET_DISK_DEVICE=$(losetup --show --find "$DISK_0_PATH")
+    echo "Using $TARGET_DISK_DEVICE as a target" 1>&2
+else
+    echo "'$DISK_0_PATH' is neither a blockdevice nor a regular file and cannot be handled by this OS provider!" 1>&2
+    exit 1
+fi
+
+# make the target block device available to hooks
+export TARGET_DISK_DEVICE
+
+# store the image as the instance's first disk
+if [[ -b "$TARGET_DISK_DEVICE" ]]; then
+    case $OSP_IMAGE_TYPE in
+    raw)
+        echo "Running 'dd if=$DISK_IMAGE of=$TARGET_DISK_DEVICE bs=2M'" 1>&2
+        if ! dd if="$DISK_IMAGE" of="$TARGET_DISK_DEVICE" bs=2M; then
+            echo "dd of '$DISK_IMAGE' to '$TARGET_DISK_DEVICE' failed" 1>&2
+            exit 1
+        fi
+    ;;
+    raw+gz)
+        echo "Running 'gunzip -c $DISK_IMAGE | dd of=$TARGET_DISK_DEVICE bs=2M'" 1>&2
+        if ! gunzip -c "$DISK_IMAGE" | dd of="$TARGET_DISK_DEVICE" bs=2M; then
+            echo "dd of '$DISK_IMAGE' to '$TARGET_DISK_DEVICE' failed" 1>&2
+            exit 1
+        fi
+    ;;
+    raw+bz2)
+        echo "Running 'bunzip2 -c $DISK_IMAGE | dd of=$TARGET_DISK_DEVICE bs=2M'" 1>&2
+        if ! bunzip2 -c "$DISK_IMAGE" | dd of="$TARGET_DISK_DEVICE" bs=2M; then
+            echo "dd of '$DISK_IMAGE' to '$TARGET_DISK_DEVICE' failed" 1>&2
+            exit 1
+        fi
+    ;;
+    raw+xz)
+        echo "Running 'unxz -c $DISK_IMAGE | dd of=$TARGET_DISK_DEVICE bs=2M'" 1>&2
+        if ! unxz -c "$DISK_IMAGE" | dd of="$TARGET_DISK_DEVICE" bs=2M; then
+            echo "dd of '$DISK_IMAGE' to '$TARGET_DISK_DEVICE' failed" 1>&2
+            exit 1
+        fi
+    ;;
+    qcow2)
+        echo "Running 'qemu-img dd -F qcow2 -O raw if=$DISK_IMAGE of=$TARGET_DISK_DEVICE'" 1>&2
+        if ! qemu-img dd -f qcow2 -O raw if="$DISK_IMAGE" of="$TARGET_DISK_DEVICE" bs=2M; then
+            echo "Writing '$DISK_IMAGE' to '$TARGET_DISK_DEVICE' failed" 1>&2
+            exit 1
+        fi
+    ;;
+    esac
+else
+    echo "'$TARGET_DISK_DEVICE' is not a blockdevice, bye!" 1>&2
+    exit 1
+fi
+
+if [ ! -d "$VARIANTS_HOOKS" ]; then
+    echo "Hooks directory '$VARIANTS_HOOKS' does not exist - not running any hooks" 1>&2
+    exit 0
+fi
+
+echo "Running hooks from '$VARIANTS_HOOKS'"
+run-parts "$VARIANTS_HOOKS"
